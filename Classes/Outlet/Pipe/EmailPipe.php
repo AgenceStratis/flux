@@ -21,8 +21,10 @@ use TYPO3\CMS\Core\Mail\MailMessage;
  * Pipe if you want to - just as an example - create a proper
  * email body text containing a nice representaton of the data.
  */
-class EmailPipe extends AbstractPipe implements PipeInterface
+class EmailPipe extends AbstractPipe implements PipeInterface, ViewAwarePipeInterface
 {
+
+    use ViewAwarePipeTrait;
 
     /**
      * @var string
@@ -45,19 +47,25 @@ class EmailPipe extends AbstractPipe implements PipeInterface
     protected $body = null;
 
     /**
+     * @var string|NULL
+     */
+    protected $bodySection = null;
+
+    /**
      * @return FieldInterface[]
      */
     public function getFormFields()
     {
         $fields = parent::getFormFields();
-        $fields['subject'] = Input::create(['type' => 'Input'])
+        $fields['subject'] = Input::create(array('type' => 'Input'))
             ->setName('subject');
-        $fields['body'] = Text::create(['type' => 'Text'])
+        $fields['body'] = Text::create(array('type' => 'Text'))
             ->setName('body');
-        $fields['receipent'] = Input::create(['type' => 'Input'])
+        $fields['receipent'] = Input::create(array('type' => 'Input'))
             ->setName('recipient');
-        $fields['sender'] = Input::create(['type' => 'Input'])
+        $fields['sender'] = Input::create(array('type' => 'Input'))
             ->setName('sender');
+
         return $fields;
     }
 
@@ -68,6 +76,7 @@ class EmailPipe extends AbstractPipe implements PipeInterface
     public function setRecipient($recipient)
     {
         $this->recipient = $recipient;
+
         return $this;
     }
 
@@ -86,6 +95,7 @@ class EmailPipe extends AbstractPipe implements PipeInterface
     public function setSender($sender)
     {
         $this->sender = $sender;
+
         return $this;
     }
 
@@ -104,6 +114,7 @@ class EmailPipe extends AbstractPipe implements PipeInterface
     public function setSubject($subject)
     {
         $this->subject = $subject;
+
         return $this;
     }
 
@@ -122,6 +133,7 @@ class EmailPipe extends AbstractPipe implements PipeInterface
     public function setBody($body)
     {
         $this->body = $body;
+
         return $this;
     }
 
@@ -131,6 +143,22 @@ class EmailPipe extends AbstractPipe implements PipeInterface
     public function getBody()
     {
         return $this->body;
+    }
+
+    /**
+     * @return NULL|string
+     */
+    public function getBodySection()
+    {
+        return $this->bodySection;
+    }
+
+    /**
+     * @param NULL|string $bodySection
+     */
+    public function setBodySection($bodySection)
+    {
+        $this->bodySection = $bodySection;
     }
 
     /**
@@ -146,6 +174,7 @@ class EmailPipe extends AbstractPipe implements PipeInterface
         } catch (\Swift_RfcComplianceException $error) {
             throw new Exception($error->getMessage(), $error->getCode());
         }
+
         return $data;
     }
 
@@ -155,7 +184,11 @@ class EmailPipe extends AbstractPipe implements PipeInterface
      */
     protected function prepareEmail($data)
     {
-        $body = $this->getBody();
+        if ($this->getBodySection() !== null) {
+            $body = $this->view->renderStandaloneSection($this->getBodySection(), $data);
+        } else {
+            $body = $this->getBody();
+        }
         $sender = $this->getSender();
         $recipient = $this->getRecipient();
         if (true === is_array($recipient)) {
@@ -179,6 +212,7 @@ class EmailPipe extends AbstractPipe implements PipeInterface
         $message->setFrom($senderAddress, $senderName);
         $message->setTo($recipientAddress, $recipientName);
         $message->setBody($body);
+
         return $message;
     }
 
@@ -190,4 +224,5 @@ class EmailPipe extends AbstractPipe implements PipeInterface
     {
         $message->send();
     }
+
 }

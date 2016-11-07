@@ -10,6 +10,9 @@ namespace FluidTYPO3\Flux\Outlet;
 
 use FluidTYPO3\Flux\Form;
 use FluidTYPO3\Flux\Outlet\Pipe\PipeInterface;
+use FluidTYPO3\Flux\Outlet\Pipe\ViewAwarePipeInterface;
+use TYPO3\CMS\Extbase\Error\Result;
+use TYPO3\CMS\Extbase\Mvc\View\ViewInterface;
 
 /**
  * ### Outlet Definition
@@ -31,6 +34,11 @@ abstract class AbstractOutlet implements OutletInterface
     protected $data;
 
     /**
+     * @var ViewInterface
+     */
+    protected $view;
+
+    /**
      * @var PipeInterface[]
      */
     protected $pipesIn = [];
@@ -41,12 +49,25 @@ abstract class AbstractOutlet implements OutletInterface
     protected $pipesOut = [];
 
     /**
+     * @var array<OutletArgument>
+     */
+    protected $arguments = [];
+
+    /**
+     * The validation results. This can be asked if the argument has errors.
+     *
+     * @var \TYPO3\CMS\Extbase\Error\Result
+     */
+    protected $validationResults = null;
+
+    /**
      * @param boolean $enabled
      * @return OutletInterface
      */
     public function setEnabled($enabled)
     {
         $this->enabled = $enabled;
+
         return $this;
     }
 
@@ -69,6 +90,7 @@ abstract class AbstractOutlet implements OutletInterface
         foreach ($pipes as $pipe) {
             $this->addPipeIn($pipe);
         }
+
         return $this;
     }
 
@@ -91,6 +113,7 @@ abstract class AbstractOutlet implements OutletInterface
         foreach ($pipes as $pipe) {
             $this->addPipeOut($pipe);
         }
+
         return $this;
     }
 
@@ -111,6 +134,7 @@ abstract class AbstractOutlet implements OutletInterface
         if (false === in_array($pipe, $this->pipesIn)) {
             array_push($this->pipesIn, $pipe);
         }
+
         return $this;
     }
 
@@ -123,6 +147,7 @@ abstract class AbstractOutlet implements OutletInterface
         if (false === in_array($pipe, $this->pipesOut)) {
             array_push($this->pipesOut, $pipe);
         }
+
         return $this;
     }
 
@@ -132,10 +157,15 @@ abstract class AbstractOutlet implements OutletInterface
      */
     public function fill($data)
     {
+        $this->validate($data);
         foreach ($this->pipesIn as $pipe) {
+            if ($pipe instanceof ViewAwarePipeInterface) {
+                $pipe->setView($this->view);
+            }
             $data = $pipe->conduct($data);
         }
         $this->data = $data;
+
         return $this;
     }
 
@@ -146,8 +176,97 @@ abstract class AbstractOutlet implements OutletInterface
     {
         $data = $this->data;
         foreach ($this->pipesOut as $pipe) {
+            if ($pipe instanceof ViewAwarePipeInterface) {
+                $pipe->setView($this->view);
+            }
             $pipe->conduct($data);
         }
+
         return $data;
     }
+
+    /**
+     * @return ViewInterface
+     */
+    public function getView()
+    {
+        return $this->view;
+    }
+
+    /**
+     * @param ViewInterface $view
+     */
+    public function setView($view)
+    {
+        $this->view = $view;
+
+        return $this;
+    }
+
+    /**
+     * @return array
+     */
+    public function getArguments()
+    {
+        return $this->arguments;
+    }
+
+    /**
+     * @param array $arguments
+     */
+    public function setArguments($arguments)
+    {
+        $this->arguments = $arguments;
+    }
+
+    /**
+     * @param OutletArgument $argument
+     */
+    public function addArgument(OutletArgument $argument)
+    {
+        $this->arguments[] = $argument;
+    }
+
+    /**
+     * Validate given $data based on configured argument validations
+     *
+     * @param $data
+     * @return Result
+     */
+    public function validate($data)
+    {
+        $this->validationResults = new Result();
+        foreach ($this->arguments as $argument) {
+            /** @var OutletArgument $argument */
+            $argument->setValue(isset($data[$argument->getName()]) ? $data[$argument->getName()] : null);
+            if (!$argument->isValid()) {
+                $this->validationResults->forProperty($argument->getName())->merge($argument->getValidationResults());
+            }
+        }
+
+        return $this->validationResults;
+    }
+
+    /**
+     * @return bool TRUE if the argument is valid, FALSE otherwise
+     * @api
+     */
+    public function isValid()
+    {
+        if ($this->validationResults === null) {
+            return true;
+        }
+
+        return !$this->validationResults->hasErrors();
+    }
+
+    /**
+     * @return \TYPO3\CMS\Extbase\Error\Result Validation errors which have occurred.
+     * @api
+     */
+    public function getValidationResults()
+    {
+        return $this->validationResults;
+    }
+
 }
